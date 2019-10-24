@@ -95,8 +95,13 @@ def decoder2d(nlayers, nz_shape, nc_input, use_bn=True, nc_final=1, nc_min=8, nc
         modules.append(fc(use_bn, nz_shape, nc_input))
         for d in range(3):
             modules.append(Unsqueeze(2))
+
+    #？？？？？？？？？？？？？？？？？？？？？？？？
     nc_output = nc_input
     for nl in range(nlayers):
+
+        #？？？？？？？？？？？？？？？？？？？？？？？？？？
+        #做这个判断的意义是什么
         if (nl % nc_step==0) and (nc_output//2 >= nc_min):
             nc_output = nc_output//2
         if use_deconv:

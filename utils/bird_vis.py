@@ -39,12 +39,17 @@ class VisRenderer(object):
         # rot = np.array([ 0.66553962,  0.31033762, -0.02249813,  0.01267084])
         # This is the side view:
         import cv2
+        #绕x轴旋转的旋转矩阵
         R0 = cv2.Rodrigues(np.array([np.pi / 3, 0, 0]))[0]
+        #绕y轴旋转的旋转矩阵
         R1 = cv2.Rodrigues(np.array([0, np.pi / 2, 0]))[0]
+        #整合之后的旋转矩阵
         R = R1.dot(R0)
         R = np.vstack((np.hstack((R, np.zeros((3, 1)))), np.array([0, 0, 0,
                                                                    1])))
+        #将旋转矩阵转化为四元数
         rot = transformations.quaternion_from_matrix(R, isprecise=True)
+        #
         cam = np.hstack([0.75, 0, 0, rot])
         self.default_cam = Variable(
             torch.FloatTensor(cam).cuda(), requires_grad=False)

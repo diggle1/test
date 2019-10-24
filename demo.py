@@ -34,6 +34,7 @@ def preprocess_image(img_path, img_size=256):
 
     # Scale the max image size to be img_size
     scale_factor = float(img_size) / np.max(img.shape[:2])
+    # 缩放图片范围，最大范围是[256,256]
     img, _ = img_util.resize_img(img, scale_factor)
 
     # Crop img_size x img_size from the center
@@ -42,6 +43,8 @@ def preprocess_image(img_path, img_size=256):
     center = center[::-1]
     bbox = np.hstack([center - img_size / 2., center + img_size / 2.])
 
+    # 若放缩后的图片大小不是[256,256],则通过bbox会把输入的图片平移到[257,257]的矩阵中间，多余的位置补充1
+    # 通过这一步后所有图片大小都变为[257,257,3]
     img = img_util.crop(img, bbox, bgval=1.)
 
     # Transpose the image to 3xHxW
@@ -53,7 +56,7 @@ def preprocess_image(img_path, img_size=256):
 def visualize(img, outputs, renderer):
     vert = outputs['verts'][0]
     cam = outputs['cam_pred'][0]
-    texture = outputs['texture'][0]
+    texture = outputs['texture'][0] #[1280,6,6,6,3]
     shape_pred = renderer(vert, cam)
     img_pred = renderer(vert, cam, texture=texture)
 
@@ -67,9 +70,9 @@ def visualize(img, outputs, renderer):
 
     img = np.transpose(img, (1, 2, 0))
     import matplotlib.pyplot as plt
-    plt.ion()
+    #plt.ion()
     plt.figure(1)
-    plt.clf()
+    #plt.clf()
     plt.subplot(231)
     plt.imshow(img)
     plt.title('input')
@@ -94,8 +97,8 @@ def visualize(img, outputs, renderer):
     plt.axis('off')
     plt.draw()
     plt.show()
-    import ipdb
-    ipdb.set_trace()
+    #import ipdb
+    #ipdb.set_trace()
 
 
 def main(_):
@@ -107,6 +110,8 @@ def main(_):
     predictor = pred_util.MeshPredictor(opts)
     outputs = predictor.predict(batch)
 
+
+    #？？？？？？？？？？？？？？？？？？？？？？？？？？？？？？？？？？？？？？
     # This is resolution
     renderer = predictor.vis_rend
     renderer.set_light_dir([0, 1, -1], 0.4)

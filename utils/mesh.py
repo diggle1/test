@@ -26,6 +26,8 @@ def make_symmetric(verts, faces):
 
     v[:num_indept + num_sym] = A
     v[:-num_sym] = -A[num_indept:]
+    verts存储点的坐标
+
     """
     left = verts[:, 0] < 0
     right = verts[:, 0] > 0
@@ -48,18 +50,22 @@ def make_symmetric(verts, faces):
         if np.any(verts[ri] != np.array([-1, 1, 1]) * verts[li]):
             print('bad! %d' % ind)
             import ipdb; ipdb.set_trace()
-    
+    #将左右和中间点的索引值重新排列
     new_order = np.hstack([center_inds, right_inds, prop_left_inds])
-    # verts i is now vert j
+    # verts i is now vert j 用来过渡的将新索引与面片的新索引连接起来
     ind_perm = np.hstack([np.where(new_order==i)[0] for i in range(verts.shape[0])])
 
+    #根据索引值重排点值
     new_verts = verts[new_order, :]
+    #找到每个面片对应的3个索引值（对应new_order中的）
     new_faces0 = ind_perm[faces]
 
     new_faces, num_indept_faces, num_sym_faces = make_faces_symmetric(new_verts, new_faces0, num_indept, num_sym)
     
     return new_verts, new_faces, num_indept, num_sym, num_indept_faces, num_sym_faces
 
+
+#找到对称的面片和独立的面片并按照一定的形式进行存储
 def make_faces_symmetric(verts, faces, num_indept_verts, num_sym_verts):
     """
     This reorders the faces, such that it has this order:
@@ -155,6 +161,8 @@ def make_faces_symmetric(verts, faces, num_indept_verts, num_sym_verts):
     return new_faces, num_indept_faces, num_sym_faces
 
 
+
+#将数据转化为边加点的组合，result中每行的前两个代表一条边，后面的数据代表faces中与这条边构成三角面片的点
 def compute_edges2verts(verts, faces):
     """
     Returns a list: [A, B, C, D] the 4 vertices for each edge.
@@ -198,8 +206,8 @@ def get_spherical_coords(X):
     phi = np.arctan2(X[:, 1], X[:, 0])
 
     # Normalize both to be between [-1, 1]
-    vv = (theta / np.pi) * 2 - 1
-    uu = ((phi + np.pi) / (2*np.pi)) * 2 - 1
+    vv = (theta / np.pi) * 2 - 1     # 23616=656*36
+    uu = ((phi + np.pi) / (2*np.pi)) * 2 - 1  # 23616=656*36
     # Return N x 2
     return np.stack([uu, vv],1)
 
@@ -215,21 +223,24 @@ def compute_uvsampler(verts, faces, tex_size=2):
     import itertools
     # Barycentric coordinate values
     coords = np.stack([p for p in itertools.product(*[alpha, beta])])
-    vs = verts[faces]
+    vs = verts[faces]   #(656,3,3)
     # Compute alpha, beta (this is the same order as NMR)
-    v2 = vs[:, 2]
-    v0v2 = vs[:, 0] - vs[:, 2]
+    #v2为每个三角面片中第3个点的坐标，下面这样做的意图是使三角面片内部的颜色由不同的地方采集而来,tex_size=6,则里面包含36个点
+    v2 = vs[:, 2]     #(656,3)
+    v0v2 = vs[:, 0] - vs[:, 2]    #(656,3)
     v1v2 = vs[:, 1] - vs[:, 2]    
     # F x 3 x T*2
-    samples = np.dstack([v0v2, v1v2]).dot(coords.T) + v2.reshape(-1, 3, 1)    
+    #面片内部采样点，tex_size=6,点数为6*6等于36个
+    samples = np.dstack([v0v2, v1v2]).dot(coords.T) + v2.reshape(-1, 3, 1)    #(656,3,36)
     # F x T*2 x 3 points on the sphere 
-    samples = np.transpose(samples, (0, 2, 1))
+    samples = np.transpose(samples, (0, 2, 1))  #(656,36,3)
 
     # Now convert these to uv.
+    #找到每个点所对应uv图上的坐标
     uv = get_spherical_coords(samples.reshape(-1, 3))
     # uv = uv.reshape(-1, len(coords), 2)
-
-    uv = uv.reshape(-1, tex_size, tex_size, 2)
+    #每个面片对应的uv图中的采样点（每个36个点）
+    uv = uv.reshape(-1, tex_size, tex_size, 2)  #[656,6,6,2]
     return uv
 
 

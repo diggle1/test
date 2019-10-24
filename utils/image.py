@@ -81,7 +81,8 @@ def crop(img, bbox, bgval=0):
     x_max_src = min(im_w, bbox[2]+1)
     y_min_src = max(0, bbox[1])
     y_max_src = min(im_h, bbox[3]+1)
-    
+
+    #相当于找到原图中对应坐标的区域像素位置在img_out中的对应坐标位置
     x_min_trg = x_min_src - bbox[0]
     x_max_trg = x_max_src - x_min_src + x_min_trg
     y_min_trg = y_min_src - bbox[1]

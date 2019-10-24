@@ -175,6 +175,7 @@ class NeuralRenderer(torch.nn.Module):
         return proj[:, :, :2]
 
     def forward(self, vertices, faces, cams, textures=None):
+        #self.offset_z这个变量的意义是什么？？？？？？？？？？？？？？？？？？？？？？？？？
         verts = self.proj_fn(vertices, cams, offset_z=self.offset_z)
 
         if textures is not None:

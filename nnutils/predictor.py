@@ -42,9 +42,12 @@ class MeshPredictor(object):
         self.model.eval()
         self.model = self.model.cuda(device=self.opts.gpu_id)
 
+        #???????????????????????????????????这个应该怎么运用
+
         self.renderer = NeuralRenderer(opts.img_size)
 
         if opts.texture:
+            #纹理为啥也需要一个这个
             self.tex_renderer = NeuralRenderer(opts.img_size)
             # Only use ambient light for tex renderer
             self.tex_renderer.ambient_light_only()
@@ -66,6 +69,7 @@ class MeshPredictor(object):
             # For visualization
             faces = self.model.faces.view(1, -1, 3)
         self.faces = faces.repeat(opts.batch_size, 1, 1)
+        #???????????????????????????
         self.vis_rend = bird_vis.VisRenderer(opts.img_size,
                                              faces.data.cpu().numpy())
         self.vis_rend.set_bgcolor([1., 1., 1.])
@@ -92,6 +96,7 @@ class MeshPredictor(object):
         input_img_tensor = batch['img'].type(torch.FloatTensor)
         for b in range(input_img_tensor.size(0)):
             input_img_tensor[b] = self.resnet_transform(input_img_tensor[b])
+
 
         self.input_imgs = Variable(
             input_img_tensor.cuda(device=opts.gpu_id), requires_grad=False)
@@ -138,11 +143,14 @@ class MeshPredictor(object):
         if self.opts.use_sfm_ms:
             self.kp_verts = self.pred_v
         else:
+
+            #为什么没有看到训练vert2kp的网络，在哪里？？？？？？？？？？？？？？？？？？？？？？？？
             self.vert2kp = torch.nn.functional.softmax(
                 self.model.vert2kp, dim=1)
             self.kp_verts = torch.matmul(self.vert2kp, self.pred_v)
 
         # Project keypoints
+        #相机的中心刚好和z轴重合吗，为什么最后特征只剩下x、y坐标？？？？？？？？？？？？？？？？？？？/
         self.kp_pred = self.renderer.project_points(self.kp_verts,
                                                     self.cam_pred)
         self.mask_pred = self.renderer.forward(self.pred_v, self.faces,
@@ -151,8 +159,9 @@ class MeshPredictor(object):
         # Render texture.
         if self.opts.texture and not self.opts.use_sfm_ms:
             if self.textures.size(-1) == 2:
-                # Flow texture!
+                # Flow texture!每个采样点对应图片中的颜色坐标
                 self.texture_flow = self.textures
+                #每个点的纹理颜色（一个面片36个点）[B,1280,6,6,3]
                 self.textures = geom_utils.sample_textures(self.textures,
                                                            self.imgs)
             if self.textures.dim() == 5:  # B x F x T x T x 3
@@ -160,13 +169,14 @@ class MeshPredictor(object):
                 self.textures = self.textures.unsqueeze(4).repeat(1, 1, 1, 1,
                                                                   tex_size, 1)
 
-            # Render texture:
+            # Render texture:  [1,3,256,256]
             self.texture_pred = self.tex_renderer.forward(
                 self.pred_v, self.faces, self.cam_pred, textures=self.textures)
 
             # B x 2 x H x W
             uv_flows = self.model.texture_predictor.uvimage_pred
             # B x H x W x 2
+            #uv_flows大小为[1,128,256,2],作者说这里128是随便设置的，只要保证128*256的大小能够包括图片中鸟的所有像素
             self.uv_flows = uv_flows.permute(0, 2, 3, 1)
             self.uv_images = torch.nn.functional.grid_sample(self.imgs,
                                                              self.uv_flows)

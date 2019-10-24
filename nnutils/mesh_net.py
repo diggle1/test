@@ -96,8 +96,12 @@ class TexturePredictorUV(nn.Module):
 
     def __init__(self, nz_feat, uv_sampler, opts, img_H=64, img_W=128, n_upconv=5, nc_init=256, predict_flow=False, symmetric=False, num_sym_faces=624):
         super(TexturePredictorUV, self).__init__()
-        self.feat_H = img_H // (2 ** n_upconv)
-        self.feat_W = img_W // (2 ** n_upconv)
+
+        #?????????????????????????????????????????????
+        #n_upconv参数有什么意义   n_upconv: number of decoder layers
+        #feat_H和feat_W有什么意义
+        self.feat_H = img_H // (2 ** n_upconv)   #4
+        self.feat_W = img_W // (2 ** n_upconv)   #8
         self.nc_init = nc_init
         self.symmetric = symmetric
         self.num_sym_faces = num_sym_faces
@@ -107,7 +111,12 @@ class TexturePredictorUV(nn.Module):
         # B x F x T x T x 2 --> B x F x T*T x 2
         self.uv_sampler = uv_sampler.view(-1, self.F, self.T*self.T, 2)
 
+        #？？？？？？？？？？？？？？？？？？？？？？？？？？？？？？？？？？？？？？？？？？？
+        #为什么网络输入是nz_feat为200，输出是self.nc_init*self.feat_H*self.feat_W为8192
         self.enc = nb.fc_stack(nz_feat, self.nc_init*self.feat_H*self.feat_W, 2)
+
+        #为什么预测纹理最后的输出通道数为2，不预测的话为3
+        #是不是因为uv图坐标x，y代表两个通道，如果直接预测颜色是3个通道
         if predict_flow:
             nc_final=2
         else:
@@ -122,6 +131,8 @@ class TexturePredictorUV(nn.Module):
         self.uvimage_pred = self.decoder.forward(uvimage_pred)
         self.uvimage_pred = torch.nn.functional.tanh(self.uvimage_pred)
 
+        #self.uv_sampler表示每个面片对应的uv图中的采样点（网格点），self.uvimage_pred是预测出来的UV图像素对应原图的坐标吗？？？？？？？？？？？
+        #UV图是怎么预测出来的？？？？？？？？？？？？？？？？？？？？？？？？？？？？？？？？？？？？
         tex_pred = torch.nn.functional.grid_sample(self.uvimage_pred, self.uv_sampler)
         tex_pred = tex_pred.view(uvimage_pred.size(0), -1, self.F, self.T, self.T).permute(0, 2, 3, 4, 1)
 
@@ -148,6 +159,7 @@ class ShapePredictor(nn.Module):
         # Initialize pred_layer weights to be small so initial def aren't so big
         self.pred_layer.weight.data.normal_(0, 0.0001)
 
+    #????????????????????????????????为什么网络结构这么简单
     def forward(self, feat):
         # pdb.set_trace()
         delta_v = self.pred_layer.forward(feat)
@@ -157,6 +169,7 @@ class ShapePredictor(nn.Module):
         return delta_v
 
 
+#四元数表示旋转
 class QuatPredictor(nn.Module):
     def __init__(self, nz_feat, nz_rot=4, classify_rot=False):
         super(QuatPredictor, self).__init__()
@@ -228,7 +241,7 @@ class MeshNet(nn.Module):
         self.symmetric = opts.symmetric
         self.symmetric_texture = opts.symmetric_texture
 
-        # Mean shape.
+        # Mean shape.初始化为球体642个点，1280个面片
         verts, faces = mesh.create_sphere(opts.subdivide)
         num_verts = verts.shape[0]
 
@@ -250,6 +263,9 @@ class MeshNet(nn.Module):
             # mean shape is only half.
             self.mean_v = nn.Parameter(torch.Tensor(verts[:num_sym_output]))
 
+
+
+            #表示关于x轴对称
             # Needed for symmetrizing..
             self.flip = Variable(torch.ones(1, 3).cuda(), requires_grad=False)
             self.flip[0, 0] = -1
@@ -262,32 +278,39 @@ class MeshNet(nn.Module):
         verts_np = verts
         faces_np = faces
         self.faces = Variable(torch.LongTensor(faces).cuda(), requires_grad=False)
+        # 将数据转化为边加点的组合，result中每行的前两个代表一条边，后面的数据代表faces中与这条边构成三角面片的点
+        #这个变量后面在哪有用啊
         self.edges2verts = mesh.compute_edges2verts(verts, faces)
-
+        # 初始化特征点的位置，初始设置每个点都有可能是特征点，由论文中的方法可以求得特征点所在的位置（特征点的位置由所有点的位置，以及该点是否为特征点的概率）
         vert2kp_init = torch.Tensor(np.ones((num_kps, num_verts)) / float(num_verts))
         # Remember initial vert2kp (after softmax)
         self.vert2kp_init = torch.nn.functional.softmax(Variable(vert2kp_init.cuda(), requires_grad=False), dim=1)
         self.vert2kp = nn.Parameter(vert2kp_init)
 
-
+        #编码器
         self.encoder = Encoder(input_shape, n_blocks=4, nz_feat=nz_feat)
+        # 各种参数的预测（形状，放缩，平移等）
         self.code_predictor = CodePredictor(nz_feat=nz_feat, num_verts=self.num_output)
 
         if self.pred_texture:
             if self.symmetric_texture:
+                #减去对称的一部分之后的面片数量
                 num_faces = self.num_indept_faces + self.num_sym_faces
             else:
                 num_faces = faces.shape[0]
-
+            # 每个面片对应的uv图中的颜色采样点（每个面片36个点） [656, 6, 6, 2]
             uv_sampler = mesh.compute_uvsampler(verts_np, faces_np[:num_faces], tex_size=opts.tex_size)
             # F' x T x T x 2
             uv_sampler = Variable(torch.FloatTensor(uv_sampler).cuda(), requires_grad=False)
             # B x F' x T x T x 2
             uv_sampler = uv_sampler.unsqueeze(0).repeat(self.opts.batch_size, 1, 1, 1, 1)
+
+            #uv图大小
             img_H = int(2**np.floor(np.log2(np.sqrt(num_faces) * opts.tex_size)))
             img_W = 2 * img_H
             self.texture_predictor = TexturePredictorUV(
               nz_feat, uv_sampler, opts, img_H=img_H, img_W=img_W, predict_flow=True, symmetric=opts.symmetric_texture, num_sym_faces=self.num_sym_faces)
+
             nb.net_init(self.texture_predictor)
 
     def forward(self, img):
@@ -312,6 +335,7 @@ class MeshNet(nn.Module):
                 return torch.cat([V, V_left], 0)
             else:
                 # With batch
+                # 求左边的变形
                 V_left = self.flip * V[:, -self.num_sym:]
                 return torch.cat([V, V_left], 1)
         else:

@@ -47,6 +47,7 @@ def orthographic_proj_withz(X, cam, offset_z=0.):
     Orth preserving the z.
     """
     quat = cam[:, -4:]
+    # 利用四元数进行旋转
     X_rot = quat_rotate(X, quat)
 
     scale = cam[:, 0].contiguous().view(-1, 1, 1)
@@ -54,6 +55,8 @@ def orthographic_proj_withz(X, cam, offset_z=0.):
 
     proj = scale * X_rot
 
+    #平移为什么要这样操作？？？？？？？？？？？？？？？？？？？？？？？？
+    #offset_z的意义？？？？？？？？？？？？？？？？？？？？？？？？
     proj_xy = proj[:, :, :2] + trans
     proj_z = proj[:, :, 2, None] + offset_z
 
@@ -124,11 +127,14 @@ def quat_rotate(X, q):
         X_rot: B X N X 3 (rotated points)
     """
     # repeat q along 2nd dim
-    ones_x = X[[0], :, :][:, :, [0]]*0 + 1
-    q = torch.unsqueeze(q, 1)*ones_x
 
-    q_conj = torch.cat([ q[:, :, [0]] , -1*q[:, :, 1:4] ], dim=-1)
+    ones_x = X[[0], :, :][:, :, [0]]*0 + 1            #[B,15,1]
+    q = torch.unsqueeze(q, 1)*ones_x                    #[B,15,4]
+
+    # q的逆
+    q_conj = torch.cat([ q[:, :, [0]] , -1*q[:, :, 1:4] ], dim=-1)  #[B,15,4]
     X = torch.cat([ X[:, :, [0]]*0, X ], dim=-1)
-    
+
+    # 相当于q*X*q（-1）
     X_rot = hamilton_product(q, hamilton_product(X, q_conj))
     return X_rot[:, :, 1:4]
